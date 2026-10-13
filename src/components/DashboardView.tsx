@@ -14,7 +14,7 @@ import { useShopData } from '../lib/shop-data'
 import { useShell, viewHref } from '../lib/shell'
 import type { Order } from '../lib/types'
 import { OrdersTable } from './OrdersTable'
-import { Button, EmptyState, Icon, Loading, Notice, Panel, SearchInput, StatCard, type IconName } from './ui'
+import { Button, EmptyState, Icon, Loading, Notice, Panel, SearchInput, StatCard, StatusBadge, type IconName } from './ui'
 
 export function DashboardView({ email }: { email: string | undefined }) {
   const { shop, orders, paymentStatus, paymentsToday, customerById, loading, services, prices } = useShopData()
@@ -39,6 +39,7 @@ export function DashboardView({ email }: { email: string | undefined }) {
         0,
       ),
       received: byStatus('received').length,
+      active: byStatus('received').length + byStatus('in_progress').length,
       processing: byStatus('in_progress').length,
       ready: ready.length,
       readyToCollect: balance(ready),
@@ -61,17 +62,17 @@ export function DashboardView({ email }: { email: string | undefined }) {
 
   return (
     <>
-      <div className="mb-7 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-muted">
+      <div className="mb-5 flex flex-col gap-4 sm:mb-7 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-muted sm:text-sm">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          <h1 className="display mt-0.5 text-[1.75rem] sm:text-[2rem]">
-            {greeting()}, {name}
+          <h1 className="display mt-0.5 text-[1.4rem] sm:text-[2rem]">
+            {greeting()},<span className="max-sm:block max-sm:truncate"> {name}</span>
           </h1>
-          <p className="mt-1 text-muted">Here is what needs doing in the shop today.</p>
+          <p className="mt-1 text-muted max-sm:hidden">Here is what needs doing in the shop today.</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 max-sm:hidden sm:flex-row sm:items-center">
           <form
             role="search"
             className="sm:w-72"
@@ -108,7 +109,17 @@ export function DashboardView({ email }: { email: string | undefined }) {
         </div>
       )}
 
-      <section aria-label="Today at a glance" className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
+      <MobileToday
+        loading={loading}
+        revenueToday={stats.revenueToday}
+        paymentsTodayCount={stats.paymentsTodayCount}
+        active={stats.active}
+        ready={stats.ready}
+        outstanding={stats.outstanding}
+        owingCount={stats.owingCount}
+      />
+
+      <section aria-label="Today at a glance" className="grid gap-4 max-sm:hidden sm:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Orders today"
           icon="orders"
@@ -147,18 +158,19 @@ export function DashboardView({ email }: { email: string | undefined }) {
           value={loading ? '…' : formatAmount(stats.outstanding)}
           detail={`Across ${stats.owingCount} ${stats.owingCount === 1 ? 'order' : 'orders'}`}
           href={viewHref('orders', { status: 'all', payment: 'owing' })}
-          className="max-sm:col-span-2"
         />
       </section>
 
       <QuickActions />
 
-      <div className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <MobileAttention loading={loading} overdue={overdue.length} awaiting={awaiting.length} />
+
+      <div className="mt-5 grid gap-6 sm:mt-6 2xl:grid-cols-[minmax(0,1fr)_22rem]">
         <Panel
           title="Recent orders"
-          description="The latest drop-offs and where they are."
+          description={<span className="max-sm:hidden">The latest drop-offs and where they are.</span>}
           action={
-            <a href={viewHref('orders', { status: 'all' })} className="inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
+            <a href={viewHref('orders', { status: 'all' })} className="inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline max-sm:hidden">
               View all <Icon name="arrowRight" className="size-4" />
             </a>
           }
@@ -174,11 +186,16 @@ export function DashboardView({ email }: { email: string | undefined }) {
               </EmptyState>
             </div>
           ) : (
-            <OrdersTable orders={orders.slice(0, 8)} caption="Recent orders" />
+            <>
+              <div className="max-sm:hidden">
+                <OrdersTable orders={orders.slice(0, 8)} caption="Recent orders" />
+              </div>
+              <RecentOrdersList orders={orders.slice(0, 5)} />
+            </>
           )}
         </Panel>
 
-        <div className="order-first grid content-start gap-6 md:grid-cols-2 2xl:order-none 2xl:grid-cols-1">
+        <div className="order-first grid content-start gap-6 max-sm:hidden md:grid-cols-2 2xl:order-none 2xl:grid-cols-1">
           <Panel title="Needs attention" description="Late work, orders waiting to be collected and machines due for service.">
             {loading ? (
               <div className="px-5">
@@ -222,30 +239,199 @@ export function DashboardView({ email }: { email: string | undefined }) {
 
 function QuickActions() {
   const { newOrder, addCustomer, recordPayment } = useShell()
-  const actions: { label: string; detail: string; icon: IconName; onClick: () => void; tone: string; tile: string }[] = [
-    { label: 'New order', detail: 'Take in a drop-off', icon: 'plus', onClick: () => newOrder(), tone: 'bg-brand-wash hover:border-brand/40', tile: 'bg-brand text-white' },
-    { label: 'Add customer', detail: 'Save name and phone', icon: 'userPlus', onClick: addCustomer, tone: 'bg-settled-wash hover:border-settled/40', tile: 'bg-settled text-white' },
-    { label: 'Record payment', detail: 'Against an open balance', icon: 'cash', onClick: recordPayment, tone: 'bg-tag-wash hover:border-tag/50', tile: 'bg-tag text-white' },
-  ]
+  // On phones, New order and Add customer sit side by side and Record payment
+  // drops to a slim secondary row; from sm up all three are equal cards.
+  const card =
+    'flex rounded-2xl border text-left transition-colors max-sm:min-h-24 max-sm:flex-col max-sm:items-start max-sm:justify-between max-sm:gap-2 max-sm:p-3.5 sm:items-center sm:gap-3 sm:p-4'
   return (
-    <section aria-label="Quick actions" className="mt-6 grid gap-3 sm:grid-cols-3">
-      {actions.map((a) => (
-        <button
-          key={a.label}
-          type="button"
-          onClick={a.onClick}
-          className={cx('flex items-center gap-3 rounded-2xl border border-transparent p-4 text-left transition-colors', a.tone)}
-        >
-          <span className={cx('grid size-10 shrink-0 place-items-center rounded-xl shadow-sm', a.tile)}>
-            <Icon name={a.icon} />
-          </span>
-          <span>
-            <span className="block font-semibold text-ink">{a.label}</span>
-            <span className="block text-sm text-ink-soft">{a.detail}</span>
-          </span>
-        </button>
-      ))}
+    <section aria-label="Quick actions" className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3">
+      <button
+        type="button"
+        onClick={() => newOrder()}
+        className={cx(card, 'border-transparent bg-brand text-white hover:bg-brand-deep sm:bg-brand-wash sm:text-ink sm:hover:border-brand/40 sm:hover:bg-brand-wash')}
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/20 shadow-sm sm:bg-brand sm:text-white">
+          <Icon name="plus" />
+        </span>
+        <span>
+          <span className="block font-semibold">New order</span>
+          <span className="block text-sm text-ink-soft max-sm:hidden">Take in a drop-off</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={addCustomer}
+        className={cx(card, 'border-line bg-paper hover:border-settled/40 sm:border-transparent sm:bg-settled-wash')}
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-settled text-white shadow-sm">
+          <Icon name="userPlus" />
+        </span>
+        <span>
+          <span className="block font-semibold text-ink">Add customer</span>
+          <span className="block text-sm text-ink-soft max-sm:hidden">Save name and phone</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={recordPayment}
+        className="flex min-h-11 items-center gap-3 rounded-xl border border-line px-3.5 text-left transition-colors hover:bg-rinse max-sm:col-span-2 sm:rounded-2xl sm:border-transparent sm:bg-tag-wash sm:p-4 sm:hover:border-tag/50 sm:hover:bg-tag-wash"
+      >
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-tag text-white shadow-sm sm:size-10 sm:rounded-xl">
+          <Icon name="cash" className="size-4 sm:size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-ink sm:text-base">Record payment</span>
+          <span className="block text-sm text-ink-soft max-sm:hidden">Against an open balance</span>
+        </span>
+        <Icon name="arrowRight" className="size-4 text-muted sm:hidden" />
+      </button>
     </section>
+  )
+}
+
+/** Phone-only: the three numbers an owner checks first, plus money still owed. */
+function MobileToday({
+  loading,
+  revenueToday,
+  paymentsTodayCount,
+  active,
+  ready,
+  outstanding,
+  owingCount,
+}: {
+  loading: boolean
+  revenueToday: number
+  paymentsTodayCount: number
+  active: number
+  ready: number
+  outstanding: number
+  owingCount: number
+}) {
+  const v = (x: ReactNode) => (loading ? '…' : x)
+  return (
+    <section aria-label="Today at a glance" className="sm:hidden">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card col-span-2 flex items-center justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-muted">Collected today</p>
+            <p className="mt-0.5 truncate text-[1.6rem] leading-tight font-semibold tracking-tight">{v(formatAmount(revenueToday))}</p>
+            <p className="text-xs text-muted">
+              {paymentsTodayCount} {paymentsTodayCount === 1 ? 'payment' : 'payments'}
+            </p>
+          </div>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-settled-wash text-settled">
+            <Icon name="cash" />
+          </span>
+        </div>
+        <MobileStat href={viewHref('orders', { status: 'open' })} label="Active orders" value={v(active)} dot="bg-brand" />
+        <MobileStat href={viewHref('orders', { status: 'ready' })} label="Ready for pickup" value={v(ready)} dot="bg-tag" />
+      </div>
+      {!loading && outstanding > 0 && (
+        <a
+          href={viewHref('orders', { status: 'all', payment: 'owing' })}
+          className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-xl border border-owed/30 bg-paper px-3.5 text-sm"
+        >
+          <span className="min-w-0 truncate">
+            <span className="font-semibold text-owed">{formatAmount(outstanding)}</span>{' '}
+            <span className="text-ink-soft">
+              owed on {owingCount} {owingCount === 1 ? 'order' : 'orders'}
+            </span>
+          </span>
+          <Icon name="arrowRight" className="size-4 shrink-0 text-owed" />
+        </a>
+      )}
+    </section>
+  )
+}
+
+function MobileStat({ href, label, value, dot }: { href: string; label: string; value: ReactNode; dot: string }) {
+  return (
+    <a href={href} className="card block p-4 active:bg-rinse">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-muted">
+        <span aria-hidden="true" className={cx('size-2 rounded-full', dot)} />
+        {label}
+      </p>
+      <p className="mt-1 text-[1.6rem] leading-tight font-semibold tracking-tight">{value}</p>
+    </a>
+  )
+}
+
+/** Phone-only: one tappable row per thing that needs doing, with a count. */
+function MobileAttention({ loading, overdue, awaiting }: { loading: boolean; overdue: number; awaiting: number }) {
+  const { supplies, equipment, opsError } = useShopData()
+  if (loading) return null
+  const low = opsError ? 0 : supplies.filter((s) => s.is_low).length
+  const service = opsError
+    ? 0
+    : equipment.filter((e) => e.is_active && serviceState(e).tone !== 'quiet').length
+  type Row = { label: string; count: number; href: string; icon: IconName; tone: string }
+  const all: Row[] = [
+    { label: 'Overdue orders', count: overdue, href: viewHref('orders', { status: 'overdue' }), icon: 'clock', tone: 'bg-owed-wash text-owed' },
+    { label: 'Awaiting collection', count: awaiting, href: viewHref('orders', { status: 'ready' }), icon: 'bag', tone: 'bg-tag-wash text-tag-deep' },
+    { label: 'Low-stock supplies', count: low, href: viewHref('inventory'), icon: 'box', tone: 'bg-owed-wash text-owed' },
+    { label: 'Equipment service due', count: service, href: viewHref('expenses', { tab: 'equipment' }), icon: 'wrench', tone: 'bg-taupe-100 text-taupe-700' },
+  ]
+  const rows = all.filter((r) => r.count > 0)
+
+  return (
+    <section aria-labelledby="mobile-attention" className="mt-5 sm:hidden">
+      <h2 id="mobile-attention" className="mb-2 text-base font-semibold">
+        Needs attention
+      </h2>
+      {rows.length === 0 ? (
+        <p className="flex min-h-11 items-center gap-2 rounded-xl bg-settled-wash px-3.5 text-sm font-semibold text-settled">
+          <Icon name="check" className="size-4" /> All clear for now.
+        </p>
+      ) : (
+        <ul className="card divide-y divide-line overflow-hidden">
+          {rows.map((r) => (
+            <li key={r.label}>
+              <a href={r.href} className="flex min-h-12 items-center gap-3 px-4 active:bg-rinse">
+                <span className={cx('grid size-8 shrink-0 place-items-center rounded-lg', r.tone)}>
+                  <Icon name={r.icon} className="size-4" />
+                </span>
+                <span className="flex-1 text-sm font-semibold">{r.label}</span>
+                <span className="text-sm font-semibold text-muted">{r.count}</span>
+                <Icon name="arrowRight" className="size-4 text-muted" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/** Phone-only recent orders: number, customer and status in one tappable row. */
+function RecentOrdersList({ orders }: { orders: Order[] }) {
+  const { customerById } = useShopData()
+  const { openOrder } = useShell()
+  return (
+    <div className="sm:hidden">
+      <ul className="divide-y divide-line">
+        {orders.map((o) => (
+          <li key={o.id}>
+            <button
+              type="button"
+              onClick={() => openOrder(o.id)}
+              className="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-2 text-left active:bg-rinse"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{customerById.get(o.customer_id)?.customer_name ?? 'Unknown customer'}</span>
+                <span className="ticket-number block text-xs text-brand">#{o.order_number}</span>
+              </span>
+              <StatusBadge status={o.order_status} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <a
+        href={viewHref('orders', { status: 'all' })}
+        className="flex min-h-12 items-center justify-center gap-1.5 border-t border-line text-sm font-semibold text-brand"
+      >
+        View all orders <Icon name="arrowRight" className="size-4" />
+      </a>
+    </div>
   )
 }
 

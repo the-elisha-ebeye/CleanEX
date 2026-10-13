@@ -66,22 +66,25 @@ export function AppShell({ email }: { email: string | undefined }) {
         </aside>
 
         <div className="flex min-h-svh min-w-0 flex-col bg-paper lg:my-2 lg:mr-2 lg:min-h-[calc(100svh-1rem)] lg:rounded-2xl lg:border lg:border-line lg:shadow-[var(--shadow-card)]">
-          <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-line bg-taupe-50/95 px-3 py-2.5 backdrop-blur lg:hidden">
-            <div className="flex items-center gap-1">
-              <Button variant="quiet" size="sm" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
-                <Icon name="menu" />
-              </Button>
-              <a href={viewHref('dashboard')} aria-label="CleanEX dashboard">
-                <Wordmark compact />
-              </a>
-            </div>
-            <Button size="sm" onClick={() => actions.newOrder()}>
+          <header className="sticky top-0 z-10 flex min-h-14 items-center justify-between gap-2 border-b border-line bg-taupe-50/95 px-4 py-2 backdrop-blur lg:hidden">
+            <a href={viewHref('dashboard')} aria-label="CleanEX dashboard" className="flex min-h-11 items-center">
+              <Wordmark compact />
+            </a>
+            {/* The dashboard has its own large New order action on phones. */}
+            <Button
+              onClick={() => actions.newOrder()}
+              className={cx('min-h-11', view === 'dashboard' && 'max-sm:hidden')}
+            >
               <Icon name="plus" />
               New order
             </Button>
           </header>
 
-          <main id="main" tabIndex={-1} className="flex-1 px-4 py-6 sm:px-6 lg:px-9 lg:py-8">
+          <main
+            id="main"
+            tabIndex={-1}
+            className="flex-1 px-4 pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:px-9 lg:py-8"
+          >
             {error && (
               <div className="mb-6">
                 <Notice>
@@ -100,6 +103,8 @@ export function AppShell({ email }: { email: string | undefined }) {
             {view === 'settings' && <SettingsView params={route.params} email={email} />}
           </main>
         </div>
+
+        <BottomNav view={view} menuOpen={menuOpen} onMore={() => setMenuOpen(true)} />
 
         <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" variant="drawer-left">
           <div className="-mx-1 flex h-full flex-col" onClick={(e) => (e.target as HTMLElement).closest('a') && setMenuOpen(false)}>
@@ -194,5 +199,59 @@ function ProfileCard({ shopName, email }: { shopName: string; email: string | un
         Sign out
       </Button>
     </div>
+  )
+}
+
+// Phones and tablets get a thumb-reachable tab bar; everything else is under More.
+const TABS: { id: ViewId; label: string; icon: IconName }[] = [
+  { id: 'dashboard', label: 'Home', icon: 'dashboard' },
+  { id: 'orders', label: 'Orders', icon: 'orders' },
+  { id: 'customers', label: 'Customers', icon: 'people' },
+  { id: 'inventory', label: 'Inventory', icon: 'box' },
+]
+
+function BottomNav({ view, menuOpen, onMore }: { view: ViewId; menuOpen: boolean; onMore: () => void }) {
+  const inMore = !TABS.some((t) => t.id === view)
+  const item =
+    'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-[0.7rem] font-semibold transition-colors'
+  return (
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper/95 px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden"
+    >
+      <ul className="mx-auto grid max-w-lg grid-cols-5">
+        {TABS.map((t) => {
+          const active = view === t.id
+          return (
+            <li key={t.id}>
+              <a
+                href={viewHref(t.id)}
+                aria-current={active ? 'page' : undefined}
+                className={cx(item, active ? 'text-brand' : 'text-muted hover:text-ink')}
+              >
+                <span className={cx('grid h-7 w-12 place-items-center rounded-full', active && 'bg-brand-wash')}>
+                  <Icon name={t.icon} />
+                </span>
+                {t.label}
+              </a>
+            </li>
+          )
+        })}
+        <li>
+          <button
+            type="button"
+            onClick={onMore}
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen}
+            className={cx(item, 'w-full', inMore ? 'text-brand' : 'text-muted hover:text-ink')}
+          >
+            <span className={cx('grid h-7 w-12 place-items-center rounded-full', inMore && 'bg-brand-wash')}>
+              <Icon name="menu" />
+            </span>
+            More
+          </button>
+        </li>
+      </ul>
+    </nav>
   )
 }
